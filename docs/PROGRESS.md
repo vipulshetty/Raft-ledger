@@ -21,3 +21,8 @@ Files added/changed: `sim/src/main/java/com/raftledger/sim/VirtualClock.java`, `
 Docs written: `docs/walkthrough/phase-1.md`
 Known gaps / risks: The Phase 1 toy `World` is a validation harness, not the production Raft simulator; fault scheduling and Raft invariant checking remain Phase 2 work.
 Decisions made (ADRs): none; Phase 1 uses the existing sans-I/O decision and the named JDK random-generator algorithm already allowed by the specification.
+
+PHASE 0 FINALIZATION: Local gate
+Commands run:
+  `D:\PROJECTS\raftledger\mvnw.cmd -B clean verify` -> exit 0 (JaCoCo skipped locally due to host JDK class-file version mismatch; CI uses Temurin 21 and runs coverage)
+Notes: All Phase 0 items completed and documented; idempotency key retention deferred to ADR-002. Proceeding to the Phase 1 simulator audit and hardening (already committed).
