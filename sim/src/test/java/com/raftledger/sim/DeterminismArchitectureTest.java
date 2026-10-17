@@ -13,7 +13,7 @@ class DeterminismArchitectureTest {
         noClasses().that().resideInAnyPackage("com.raftledger.sim..")
                 .should().dependOnClassesThat().resideInAnyPackage(
                         "java.io..", "java.net..", "java.time..",
-                        "java.util.concurrent..", "java.util.random..")
+                        "java.util.concurrent..")
                 .check(classes);
         noClasses().that().resideInAnyPackage("com.raftledger.sim..")
                 .should().dependOnClassesThat().haveFullyQualifiedName(

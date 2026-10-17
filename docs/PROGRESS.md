@@ -12,3 +12,12 @@ Files added/changed: Maven Wrapper (`mvnw`, `mvnw.cmd`, `.mvn/wrapper/maven-wrap
 Docs written: `docs/walkthrough/phase-0.md`, `docs/decisions/ADR-002-idempotency-retention.md`, `.github/workflows/ci.yml`
 Known gaps / risks: Idempotency results are currently retained for the lifetime of the in-memory state machine because application has no replicated log-index input; snapshot-based pruning is deferred and documented in ADR-002.
 Decisions made (ADRs): ADR-002 records why log-index retention cannot yet be implemented safely and defines snapshot/log-index pruning as the follow-up.
+
+PHASE 1: Deterministic simulator  —  GATE: PASS
+Commands run:
+  `D:\PROJECTS\raftledger\mvnw.cmd -B -pl sim -am clean test` -> exit 0, tests: 8/0/0
+  `D:\PROJECTS\raftledger\mvnw.cmd -B verify` -> exit 0, tests: 15/0/0; BUILD SUCCESS
+Files added/changed: `sim/src/main/java/com/raftledger/sim/VirtualClock.java`, `SimNetwork.java`, `SimDisk.java`, `Scenario.java`, `World.java`; simulator and separate-JVM tests; simulator ArchUnit allowance for explicitly seeded `RandomGenerator`
+Docs written: `docs/walkthrough/phase-1.md`
+Known gaps / risks: The Phase 1 toy `World` is a validation harness, not the production Raft simulator; fault scheduling and Raft invariant checking remain Phase 2 work.
+Decisions made (ADRs): none; Phase 1 uses the existing sans-I/O decision and the named JDK random-generator algorithm already allowed by the specification.
