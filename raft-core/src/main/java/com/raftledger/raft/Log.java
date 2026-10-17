@@ -43,10 +43,15 @@ public final class Log {
                 entries.subList((int) startIndex - 1, entries.size()));
     }
 
-    /** True when this log is at least as up-to-date as (otherLastTerm, otherLastIndex). */
-    public boolean isAtLeastAsUpToDate(long otherLastTerm, long otherLastIndex) {
-        if (lastTerm() != otherLastTerm) return lastTerm() > otherLastTerm;
-        return lastIndex() >= otherLastIndex;
+    /**
+     * Raft §5.4.1 election restriction: true when a candidate whose log ends at
+     * (candidateLastTerm, candidateLastIndex) is at least as up-to-date as this log.
+     * A voter must deny its vote when this returns false, otherwise a candidate
+     * missing committed entries can win and overwrite them.
+     */
+    public boolean candidateIsAtLeastAsUpToDate(long candidateLastTerm, long candidateLastIndex) {
+        if (candidateLastTerm != lastTerm()) return candidateLastTerm > lastTerm();
+        return candidateLastIndex >= lastIndex();
     }
 
     // ── Mutations (called only from RaftNodeImpl) ─────────────────────────────

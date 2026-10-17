@@ -2,8 +2,10 @@ package com.raftledger.raft;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Complete Raft consensus implementation.
@@ -58,7 +60,10 @@ public final class RaftNodeImpl implements RaftNode {
     private int  currentLeader = -1;
 
     // Election tracking
-    private int  votesReceived = 0;
+    // Distinct peers whose RequestVoteReply granted us a vote this term, plus ourselves.
+    // Set semantics matter: a duplicated reply from one peer must not count twice,
+    // otherwise a candidate can claim a majority from a single voter and elect two leaders.
+    private final Set<Integer> grantedVotes = new LinkedHashSet<>();
     private long lastHeartbeatMs = 0L;   // virtual time of last AppendEntries received
     private long currentVirtualTimeMs = 0L;
 
@@ -137,7 +142,8 @@ public final class RaftNodeImpl implements RaftNode {
         currentTerm++;
         role          = Role.CANDIDATE;
         votedFor      = nodeId;
-        votesReceived = 1;   // vote for self
+        grantedVotes.clear();
+        grantedVotes.add(nodeId);   // vote for self
         currentLeader = -1;
         lastHeartbeatMs = currentVirtualTimeMs;  // reset timer
 
@@ -192,7 +198,7 @@ public final class RaftNodeImpl implements RaftNode {
         List<Effect> effects = new ArrayList<>();
 
         boolean logUpToDate = bugMode.noLogUpToDateCheck()
-                || log.isAtLeastAsUpToDate(rv.lastLogTerm(), rv.lastLogIndex());
+                || log.candidateIsAtLeastAsUpToDate(rv.lastLogTerm(), rv.lastLogIndex());
 
         boolean canVote = (votedFor == -1 || votedFor == rv.fromNodeId())
                 && rv.term() >= currentTerm
@@ -215,9 +221,8 @@ public final class RaftNodeImpl implements RaftNode {
         if (role != Role.CANDIDATE || rvr.term() != currentTerm) return List.of();
 
         List<Effect> effects = new ArrayList<>();
-        if (rvr.voteGranted()) {
-            votesReceived++;
-            if (votesReceived >= majority()) {
+        if (rvr.voteGranted() && grantedVotes.add(rvr.fromNodeId())) {
+            if (grantedVotes.size() >= majority()) {
                 effects.addAll(becomeLeader());
             }
         }
@@ -416,7 +421,7 @@ public final class RaftNodeImpl implements RaftNode {
         // Volatile state is lost; only persistent state (loaded by the runtime) survives.
         role          = Role.FOLLOWER;
         currentLeader = -1;
-        votesReceived = 0;
+        grantedVotes.clear();
         lastHeartbeatMs = currentVirtualTimeMs;
         pendingReplies.clear();
         java.util.Arrays.fill(nextIndex, 1L);
