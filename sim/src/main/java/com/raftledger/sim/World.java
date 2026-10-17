@@ -26,22 +26,28 @@ public final class World {
         List<String> trace = new ArrayList<>();
         int[] counters = new int[3];
         boolean violation = false;
+        String failureReason = null;
+        int failureStep = -1;
         for (int step = 0; step < maxSteps; step++) {
             int amount = random.nextInt(1, 4);
             int target = random.nextInt(counters.length);
-            counters[target] += amount;
             trace.add(step + ":increment:" + target + ":" + amount);
+            for (int i = 0; i < counters.length; i++) counters[i] += amount;
             if (brokenVariant) {
                 counters[target] += amount;
                 trace.add(step + ":duplicate:" + target + ":" + amount);
-                violation = counters[target] != counters[0]
-                        || counters[target] != counters[1]
-                        || counters[target] != counters[2];
-            } else {
-                for (int i = 0; i < counters.length; i++) counters[i] += amount;
+            }
+            if (counters[target] != counters[0]
+                    || counters[target] != counters[1]
+                    || counters[target] != counters[2]) {
+                violation = true;
+                failureStep = step;
+                failureReason = "replica counters diverged after " + trace.get(trace.size() - 1);
+                break;
             }
         }
-        return new RunResult(seed, maxSteps, traceHash(trace), violation, List.copyOf(trace));
+        return new RunResult(seed, trace.size(), traceHash(trace), violation,
+                failureReason, failureStep, List.copyOf(trace));
     }
 
     private static String traceHash(List<String> trace) {
@@ -64,6 +70,8 @@ public final class World {
             int steps,
             String traceHash,
             boolean invariantViolation,
+            String failureReason,
+            int failureStep,
             List<String> trace
     ) {}
 }

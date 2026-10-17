@@ -43,8 +43,26 @@ class SimulatorTest {
         network.setDropProbability(0.0);
         network.partition(Set.of(0), Set.of(1));
         assertThat(network.send(0, 0, 1, "blocked")).isEmpty();
+        network.block(1, 0);
+        assertThat(network.send(0, 1, 0, "asymmetric-blocked")).isEmpty();
         network.heal();
         assertThat(network.send(0, 0, 1, "delivered")).hasSize(1);
+    }
+
+    @Test
+    void duplicateAndDelayAreObservableAndOrderedByDeliveryMetadata() {
+        SimNetwork<String> network = new SimNetwork<>(
+                java.util.random.RandomGeneratorFactory
+                        .<java.util.random.RandomGenerator>of("L64X128MixRandom").create(2L));
+        network.setDuplicateProbability(1.0);
+        network.setDelayRange(3, 3);
+
+        List<SimNetwork.Delivery<String>> deliveries = network.send(10, 0, 1, "message");
+
+        assertThat(deliveries).hasSize(2);
+        assertThat(deliveries).extracting(SimNetwork.Delivery::virtualTime)
+                .containsOnly(13L);
+        assertThat(deliveries.get(0).sequence()).isLessThan(deliveries.get(1).sequence());
     }
 
     @Test
@@ -57,6 +75,30 @@ class SimulatorTest {
 
         assertThat(new String(disk.read("synced"), StandardCharsets.UTF_8)).isEqualTo("one");
         assertThat(disk.read("lost")).isNull();
+    }
+
+    @Test
+    void tornUnsyncedWriteIsRetainedUntilCrashThenDiscarded() {
+        SimDisk disk = new SimDisk();
+        disk.write("record", "abcdef".getBytes(StandardCharsets.UTF_8));
+        disk.tearLastWrite("record", 3);
+
+        assertThat(new String(disk.read("record"), StandardCharsets.UTF_8)).isEqualTo("abc");
+        disk.crash();
+        assertThat(disk.read("record")).isNull();
+    }
+
+    @Test
+    void clockLimitsExecutionAndRejectsPastScheduling() {
+        VirtualClock clock = new VirtualClock();
+        clock.scheduleAt(2, () -> {});
+        clock.scheduleAt(3, () -> {});
+
+        assertThat(clock.runUntilIdle(1)).isEqualTo(1);
+        assertThat(clock.pendingEvents()).isEqualTo(1);
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                () -> clock.scheduleAt(1, () -> {}))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Property
@@ -74,8 +116,16 @@ class SimulatorTest {
 
     @Test
     void brokenToyProtocolIsCaught() {
-        assertThat(new World(true).run(7L, 10).invariantViolation()).isTrue();
-        assertThat(new World().run(7L, 10).invariantViolation()).isFalse();
+        World.RunResult broken = new World(true).run(7L, 10);
+        World.RunResult healthy = new World().run(7L, 10);
+
+        assertThat(broken.invariantViolation()).isTrue();
+        assertThat(broken.failureReason()).contains("replica counters diverged");
+        assertThat(broken.failureStep()).isGreaterThanOrEqualTo(0);
+        assertThat(broken.trace()).isNotEmpty();
+        assertThat(healthy.invariantViolation()).isFalse();
+        assertThat(healthy.failureReason()).isNull();
+        assertThat(healthy.trace()).hasSize(10);
     }
 
     @Test
