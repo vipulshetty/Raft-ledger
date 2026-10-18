@@ -5,8 +5,10 @@ package com.raftledger.raft;
  * message whose correctness depends on it.
  *
  * votedFor: -1 means "has not voted this term".
- * log: the full append-only Raft log (persisted incrementally by the WAL; this
- *      record carries only metadata — the WAL owns the bytes).
+ * logLength: the number of log records the runtime must have made durable for
+ *      this record to be recoverable; {@link Input.Restart} rejects a snapshot
+ *      whose entry count disagrees. The WAL owns the bytes, this record owns the
+ *      term and vote that gate an election.
  */
 public record PersistentState(
         long currentTerm,

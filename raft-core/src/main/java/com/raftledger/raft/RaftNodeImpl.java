@@ -105,7 +105,7 @@ public final class RaftNodeImpl implements RaftNode {
             case Input.Tick t             -> onTick(t);
             case Input.MessageReceived mr -> onMessage(mr.message());
             case Input.ClientCommand cc   -> onClientCommand(cc);
-            case Input.Restart r          -> onRestart();
+            case Input.Restart r          -> onRestart(r);
         };
     }
 
@@ -417,16 +417,30 @@ public final class RaftNodeImpl implements RaftNode {
 
     // ── Restart ───────────────────────────────────────────────────────────────
 
-    private List<Effect> onRestart() {
-        // Volatile state is lost; only persistent state (loaded by the runtime) survives.
-        role          = Role.FOLLOWER;
-        currentLeader = -1;
+    /**
+     * Recovery. Everything the runtime did not make durable is gone: the term, the
+     * vote and the log are exactly what the supplied snapshot holds, never what this
+     * object happened to be holding when it died.
+     *
+     * <p>commitIndex and lastApplied are volatile per the paper, so they restart at
+     * zero and are re-learned from the leader's heartbeats. Entries therefore reach
+     * {@code Apply} a second time after recovery; the state machine is what makes
+     * that harmless, by returning the stored result for a repeated idempotency key.
+     */
+    private List<Effect> onRestart(Input.Restart restart) {
+        currentTerm = restart.persisted().currentTerm();
+        votedFor    = restart.persisted().votedFor();
+        log.loadFrom(restart.durableLog());
+
+        role            = Role.FOLLOWER;
+        currentLeader   = -1;
+        commitIndex     = 0L;
+        lastApplied     = 0L;
         grantedVotes.clear();
         lastHeartbeatMs = currentVirtualTimeMs;
         pendingReplies.clear();
         java.util.Arrays.fill(nextIndex, 1L);
         java.util.Arrays.fill(matchIndex, 0L);
-        // currentTerm, votedFor and log already reloaded by the runtime before delivering Restart
         return List.of(new Effect.ResetElectionTimer());
     }
 

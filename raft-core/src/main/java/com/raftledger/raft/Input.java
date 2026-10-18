@@ -29,8 +29,30 @@ public sealed interface Input
     ) implements Input {}
 
     /**
-     * A restart signal: volatile state is gone, only persisted state survives.
-     * Used by the simulator to model a crash-and-recover cycle.
+     * A restart signal: volatile state is gone, only what the runtime actually
+     * made durable survives. The recovered state arrives here as data — the core
+     * reads no storage (see determinism.md).
+     *
+     * <p>{@code durableLog} is what the write-ahead log still holds after the
+     * crash. Passing a snapshot that is older than the node's last in-memory
+     * state is exactly how an un-fsynced write is modelled: the term or vote
+     * that never reached disk is simply absent, and recovery must not invent it.
+     *
+     * @param persisted  term and vote as read back from stable storage
+     * @param durableLog the log records still present in storage, index 1 upward
      */
-    record Restart() implements Input {}
+    record Restart(PersistentState persisted, java.util.List<LogEntry> durableLog) implements Input {
+        public Restart {
+            durableLog = java.util.List.copyOf(durableLog);
+            if (persisted.logLength() != durableLog.size()) {
+                throw new IllegalArgumentException("logLength " + persisted.logLength()
+                        + " disagrees with " + durableLog.size() + " durable log records");
+            }
+        }
+
+        /** A node restarting after a crash that left nothing durable. */
+        public static Restart fromEmptyStorage() {
+            return new Restart(PersistentState.initial(), java.util.List.of());
+        }
+    }
 }

@@ -229,7 +229,10 @@ class RaftNodeElectionTest {
         RaftNodeImpl node = new RaftNodeImpl(0, 3);
         electToLeader(node, 400);   // term 1, votedFor=0, no-op at index 1
 
-        List<Effect> effects = node.step(new Input.Restart());
+        // Storage as the runtime would read it back: the term/vote from the node's last
+        // Persist, plus the one log record the WAL still holds.
+        List<Effect> effects = node.step(new Input.Restart(
+                new PersistentState(1L, 0, 1), List.of(LogEntry.noOp(1, 1L))));
 
         assertThat(effects).containsExactly(new Effect.ResetElectionTimer());
         assertThat(node.role()).isEqualTo(Role.FOLLOWER);
@@ -244,7 +247,8 @@ class RaftNodeElectionTest {
     void durableVoteStillBlocksOtherCandidatesAfterARestart() {
         RaftNodeImpl node = new RaftNodeImpl(0, 3);
         electToLeader(node, 400);           // voted for itself in term 1
-        node.step(new Input.Restart());     // crash: volatile state gone, term/vote/log durable
+        node.step(new Input.Restart(        // crash: volatile state gone, term/vote/log durable
+                new PersistentState(1L, 0, 1), List.of(LogEntry.noOp(1, 1L))));
 
         // Election safety across a crash: term 1 is already claimed by node 0,
         // so a different candidate in term 1 must be denied even though the
